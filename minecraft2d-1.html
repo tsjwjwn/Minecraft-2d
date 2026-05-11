@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#87CEEB">
+<title>🌍 MineWorld 2D</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background:#000;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    height:100vh; overflow:hidden;
+    font-family:'Courier New', monospace;
+    user-select:none;
+  }
+  #ui-top {
+    position:fixed; top:0; left:0; right:0;
+    display:flex; justify-content:space-between; align-items:center;
+    padding:6px 10px;
+    background:rgba(0,0,0,0.6);
+    z-index:10;
+    font-size:12px; color:#fff;
+  }
+  #hearts { display:flex; gap:2px; }
+  .heart { font-size:14px; }
+  #info { font-size:11px; color:#aaa; }
+
+  canvas {
+    display:block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    cursor:crosshair;
+  }
+
+  /* HOTBAR */
+  #hotbar {
+    position:fixed; bottom:8px; left:50%; transform:translateX(-50%);
+    display:flex; gap:3px; z-index:10;
+  }
+  .slot {
+    width:44px; height:44px;
+    background:rgba(0,0,0,0.7);
+    border:2px solid #555;
+    border-radius:4px;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    cursor:pointer; transition:border-color 0.1s;
+    font-size:18px; position:relative;
+  }
+  .slot.active { border-color:#fff; background:rgba(255,255,255,0.15); }
+  .slot-count {
+    position:absolute; bottom:1px; right:3px;
+    font-size:9px; color:#fff; font-weight:bold;
+    text-shadow:1px 1px 0 #000;
+  }
+  .slot-label {
+    font-size:7px; color:#ccc; margin-top:1px;
+    text-align:center; line-height:1;
+  }
+
+  /* CONTROLS */
+  #controls {
+    position:fixed; bottom:62px; left:0; right:0;
+    display:flex; justify-content:space-between;
+    padding:0 8px; z-index:10; pointer-events:none;
+  }
+  .ctrl-group { display:flex; flex-direction:column; align-items:center; gap:3px; pointer-events:all; }
+  .ctrl-row { display:flex; gap:3px; }
+  .ctrl-btn {
+    width:42px; height:42px;
+    background:rgba(0,0,0,0.6);
+    border:1.5px solid rgba(255,255,255,0.3);
+    border-radius:6px; color:#fff;
+    font-size:18px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .ctrl-btn:active { background:rgba(255,255,255,0.25); }
+  .ctrl-btn.wide { width:90px; }
+
+  /* Action buttons */
+  #action-btns {
+    position:fixed; right:8px; bottom:115px;
+    display:flex; flex-direction:column; gap:6px;
+    z-index:10;
+  }
+  .action-btn {
+    width:54px; height:54px;
+    border-radius:50%; border:none; cursor:pointer;
+    font-size:22px; display:flex; align-items:center; justify-content:center;
+    -webkit-tap-highlight-color:transparent;
+    box-shadow:0 2px 8px rgba(0,0,0,0.5);
+    transition:transform 0.1s;
+  }
+  .action-btn:active { transform:scale(0.9); }
+  #btn-dig  { background:linear-gradient(135deg,#c0392b,#922b21); }
+  #btn-place { background:linear-gradient(135deg,#27ae60,#1a7a40); }
+
+  /* TOOLTIP */
+  #tooltip {
+    position:fixed; top:36px; left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,0.8); color:#fff;
+    padding:3px 10px; border-radius:4px;
+    font-size:11px; z-index:20; pointer-events:none;
+    opacity:0; transition:opacity 0.3s;
+  }
+  #tooltip.show { opacity:1; }
+
+  /* OVERLAY */
+  #overlay {
+    position:fixed; inset:0;
+    background:rgba(0,0,0,0.85);
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    z-index:100; color:#fff; text-align:center;
+  }
+  #overlay h1 { font-size:32px; color:#f0c040; text-shadow:2px 2px 0 #8b6914; margin-bottom:8px; }
+  #overlay p { color:#aaa; font-size:13px; margin-bottom:6px; line-height:1.6; }
+  #overlay .hint { font-size:11px; color:#666; margin-top:4px; }
+  .start-btn {
+    margin-top:20px; padding:12px 32px;
+    background:linear-gradient(135deg,#4caf50,#2d7a31);
+    border:none; border-radius:4px; color:#fff;
+    font-size:16px; font-family:'Courier New',monospace;
+    font-weight:bold; cursor:pointer; letter-spacing:1px;
+  }
+  .start-btn:hover { background:linear-gradient(135deg,#66bb6a,#388e3c); }
+</style>
+</head>
+<body>
+
+<div id="ui-top">
+  <div id="hearts"></div>
+  <div id="info">MineWorld 2D</div>
+  <div id="pos">x:0 y:0</div>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<div id="tooltip"></div>
+
+<div id="hotbar"></div>
+
+<div id="controls">
+  <div class="ctrl-group">
+    <div class="ctrl-row">
+      <button class="ctrl-btn wide" id="btn-left">◀</button>
+      <button class="ctrl-btn wide" id="btn-right">▶</button>
+    </div>
+  </div>
+  <div class="ctrl-group">
+    <button class="ctrl-btn" id="btn-jump">↑</button>
+  </div>
+</div>
+
+<div id="action-btns">
+  <button class="action-btn" id="btn-place">🧱</button>
+  <button class="action-btn" id="btn-dig">⛏️</button>
+</div>
+
+<div id="overlay">
+  <h1>⛏️ MineWorld 2D</h1>
+  <p>
+    🌍 Thế giới được tạo ngẫu nhiên<br>
+    ⛏️ Nhấp để <b style="color:#f0c040">đào</b> hoặc <b style="color:#4caf50">đặt khối</b><br>
+    🎒 Chọn vật liệu từ thanh dưới<br>
+    🏃 Di chuyển bằng nút ◀ ▶ ↑
+  </p>
+  <p class="hint">PC: WASD/mũi tên + click chuột trái/phải</p>
+  <button class="start-btn" onclick="startGame()">🚀 BẮT ĐẦU CHƠI</button>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+// ===== CONFIG =====
+const TILE = 24;
+const COLS = 80;
+const ROWS = 50;
+const GRAVITY = 0.4;
+const JUMP_FORCE = -9;
+const MOVE_SPEED = 3.5;
+
+// ===== BLOCK TYPES =====
+const BLOCKS = {
+  AIR:   { id:0, color:null,      name:'Không khí', emoji:'🌫️' },
+  GRASS: { id:1, color:'#5a8a2a', name:'Cỏ',        emoji:'🟩', top:'#7bc043' },
+  DIRT:  { id:2, color:'#8B5E3C', name:'Đất',       emoji:'🟫' },
+  STONE: { id:3, color:'#888',    name:'Đá',        emoji:'⬜' },
+  WOOD:  { id:4, color:'#8B6914', name:'Gỗ',        emoji:'🪵' },
+  LEAF:  { id:5, color:'#2d6e1a', name:'Lá',        emoji:'🌿' },
+  SAND:  { id:6, color:'#e8d48b', name:'Cát',       emoji:'🟡' },
+  WATER: { id:7, color:'#3a8fc4', name:'Nước',      emoji:'💧', alpha:0.7 },
+  COAL:  { id:8, color:'#555',    name:'Than',      emoji:'⚫', ore:true },
+  IRON:  { id:9, color:'#a07850', name:'Quặng sắt', emoji:'🔶', ore:true },
+  GOLD:  { id:10,color:'#f0c040', name:'Vàng',      emoji:'🟡', ore:true },
+  BEDROCK:{id:11,color:'#333',    name:'Đá tảng',   emoji:'⬛' },
+  GLASS: { id:12,color:'#add8e6', name:'Kính',      emoji:'🔷', alpha:0.4 },
+  BRICK: { id:13,color:'#b55239', name:'Gạch',      emoji:'🧱' },
+  SNOW:  { id:14,color:'#e8f0f8', name:'Tuyết',     emoji:'⬜' },
+};
+
+// ===== WORLD =====
+let world = [];
+let entities = [];
+
+function initWorld() {
+  world = Array.from({length:ROWS}, ()=>new Array(COLS).fill(0));
+
+  // Heightmap
+  let heights = [];
+  let h = 22;
+  for(let x=0;x<COLS;x++) {
+    h += (Math.random()-0.5)*3;
+    h = Math.max(15, Math.min(28, h));
+    heights.push(Math.round(h));
+  }
+
+  for(let x=0;x<COLS;x++) {
+    const sh = heights[x];
+    for(let y=0;y<ROWS;y++) {
+      if(y===ROWS-1) { world[y][x]=BLOCKS.BEDROCK.id; continue; }
+      if(y < sh-4) { world[y][x]=BLOCKS.AIR.id; continue; }
+      if(y === sh-4) { world[y][x]=BLOCKS.GRASS.id; continue; }
+      if(y < sh) { world[y][x]=BLOCKS.DIRT.id; continue; }
+      if(y >= sh) {
+        world[y][x]=BLOCKS.STONE.id;
+        // Ores
+        let r=Math.random();
+        if(y>sh+3 && r<0.03) world[y][x]=BLOCKS.COAL.id;
+        else if(y>sh+8 && r<0.015) world[y][x]=BLOCKS.IRON.id;
+        else if(y>sh+15 && r<0.008) world[y][x]=BLOCKS.GOLD.id;
+      }
+    }
+  }
+
+  // Trees
+  for(let x=3;x<COLS-3;x++) {
+    if(Math.random()<0.08) {
+      const sh = heights[x]-4;
+      const th = 3+Math.floor(Math.random()*3);
+      for(let i=0;i<th;i++) {
+        if(sh-i>=0) world[sh-i][x]=BLOCKS.WOOD.id;
+      }
+      for(let lx=-2;lx<=2;lx++) for(let ly=-2;ly<=1;ly++) {
+        const nx=x+lx, ny=sh-th+ly;
+        if(nx>=0&&nx<COLS&&ny>=0&&ny<ROWS&&world[ny][nx]===BLOCKS.AIR.id)
+          world[ny][nx]=BLOCKS.LEAF.id;
+      }
+    }
+  }
+
+  // Sand patches
+  for(let x=0;x<COLS;x++) {
+    if(Math.random()<0.1) {
+      const sh=heights[x]-4;
+      for(let lx=-1;lx<=1;lx++) {
+        const nx=x+lx;
+        if(nx>=0&&nx<COLS&&sh>=0) world[sh][nx]=BLOCKS.SAND.id;
+      }
+    }
+  }
+
+  // Water pools
+  for(let x=5;x<COLS-5;x+=12) {
+    if(Math.random()<0.3) {
+      const sh=heights[x]-4;
+      for(let wx=x;wx<x+4&&wx<COLS;wx++) {
+        world[sh][wx]=BLOCKS.WATER.id;
+      }
+    }
+  }
+}
+
+// ===== PLAYER =====
+const player = {
+  x:3*TILE, y:10*TILE,
+  vx:0, vy:0,
+  w:TILE*0.8, h:TILE*1.8,
+  onGround:false,
+  hp:10, maxHp:10,
+  selectedSlot:0,
+  inventory:[
+    {block:BLOCKS.DIRT.id,  count:64},
+    {block:BLOCKS.STONE.id, count:64},
+    {block:BLOCKS.WOOD.id,  count:32},
+    {block:BLOCKS.GLASS.id, count:32},
+    {block:BLOCKS.BRICK.id, count:32},
+    {block:BLOCKS.SAND.id,  count:32},
+    {block:BLOCKS.SNOW.id,  count:32},
+    {block:null, count:0}, // dig tool
+  ]
+};
+
+// ===== CAMERA =====
+let camX=0, camY=0;
+
+function updateCamera() {
+  const sw=canvas.width, sh=canvas.height;
+  camX = player.x - sw/2 + player.w/2;
+  camY = player.y - sh/2 + player.h/2;
+  camX = Math.max(0, Math.min(COLS*TILE-sw, camX));
+  camY = Math.max(0, Math.min(ROWS*TILE-sh, camY));
+}
+
+// ===== INPUT =====
+const keys = {};
+document.addEventListener('keydown', e=>{ keys[e.key]=true; });
+document.addEventListener('keyup',   e=>{ keys[e.key]=false; });
+
+// Touch/click on canvas
+let mouseWorld = {x:0,y:0};
+canvas.addEventListener('mousemove', e=>{
+  const r=canvas.getBoundingClientRect();
+  mouseWorld.x = (e.clientX-r.left)*(canvas.width/r.width)+camX;
+  mouseWorld.y = (e.clientY-r.top)*(canvas.height/r.height)+camY;
+});
+
+canvas.addEventListener('click', e=>{
+  e.preventDefault();
+  const r=canvas.getBoundingClientRect();
+  const wx = (e.clientX-r.left)*(canvas.width/r.width)+camX;
+  const wy = (e.clientY-r.top)*(canvas.height/r.height)+camY;
+  placeOrBreak(wx, wy, 'break');
+});
+
+canvas.addEventListener('contextmenu', e=>{
+  e.preventDefault();
+  const r=canvas.getBoundingClientRect();
+  const wx=(e.clientX-r.left)*(canvas.width/r.width)+camX;
+  const wy=(e.clientY-r.top)*(canvas.height/r.height)+camY;
+  placeOrBreak(wx, wy, 'place');
+});
+
+// Touch on canvas - chỉ update vị trí, không đào/đặt
+canvas.addEventListener('touchstart', e=>{
+  e.preventDefault();
+  const t=e.touches[0];
+  const r=canvas.getBoundingClientRect();
+  mouseWorld.x=(t.clientX-r.left)*(canvas.width/r.width)+camX;
+  mouseWorld.y=(t.clientY-r.top)*(canvas.height/r.height)+camY;
+},{passive:false});
+
+canvas.addEventListener('touchmove', e=>{
+  e.preventDefault();
+  const t=e.touches[0];
+  const r=canvas.getBoundingClientRect();
+  mouseWorld.x=(t.clientX-r.left)*(canvas.width/r.width)+camX;
+  mouseWorld.y=(t.clientY-r.top)*(canvas.height/r.height)+camY;
+},{passive:false});
+
+function placeOrBreak(wx, wy, mode) {
+  const tx=Math.floor(wx/TILE), ty=Math.floor(wy/TILE);
+  if(tx<0||tx>=COLS||ty<0||ty>=ROWS) return;
+
+  const dist=Math.sqrt(Math.pow(wx-(player.x+player.w/2),2)+Math.pow(wy-(player.y+player.h/2),2));
+  if(dist>TILE*5) { showTooltip('Quá xa!'); return; }
+
+  if(mode==='break') {
+    if(world[ty][tx]===BLOCKS.BEDROCK.id) { showTooltip('Không thể đào!'); return; }
+    if(world[ty][tx]!==BLOCKS.AIR.id) {
+      const name=Object.values(BLOCKS).find(b=>b.id===world[ty][tx])?.name||'Khối';
+      world[ty][tx]=BLOCKS.AIR.id;
+      showTooltip('Đã đào: '+name);
+      spawnParticles(tx*TILE+TILE/2, ty*TILE+TILE/2);
+    }
+  } else {
+    const slot=player.inventory[player.selectedSlot];
+    if(slot.block===null||slot.count<=0) { showTooltip('Không có vật liệu!'); return; }
+    if(world[ty][tx]===BLOCKS.AIR.id) {
+      // Check not inside player
+      const px=player.x/TILE, py=player.y/TILE;
+      if(tx>=px&&tx<=px+1&&ty>=py&&ty<=py+1.8) { showTooltip('Không thể đặt!'); return; }
+      world[ty][tx]=slot.block;
+      slot.count--;
+      if(slot.count<=0) slot.count=0;
+      const name=Object.values(BLOCKS).find(b=>b.id===slot.block)?.name||'Khối';
+      showTooltip('Đặt: '+name);
+      renderHotbar();
+    }
+  }
+}
+
+// ===== PARTICLES =====
+let particles=[];
+function spawnParticles(x,y) {
+  for(let i=0;i<6;i++) {
+    particles.push({
+      x,y,
+      vx:(Math.random()-0.5)*4,
+      vy:-Math.random()*4,
+      life:1, size:3+Math.random()*3,
+      color:`hsl(${Math.random()*60+20},60%,50%)`
+    });
+  }
+}
+function updateParticles() {
+  particles=particles.filter(p=>{
+    p.x+=p.vx; p.y+=p.vy; p.vy+=0.2; p.life-=0.05;
+    return p.life>0;
+  });
+}
+
+// ===== PHYSICS =====
+function getBlock(tx,ty) {
+  if(tx<0||tx>=COLS||ty<0||ty>=ROWS) return BLOCKS.STONE.id;
+  return world[ty][tx];
+}
+function isSolid(id) {
+  return id!==BLOCKS.AIR.id&&id!==BLOCKS.WATER.id&&id!==BLOCKS.LEAF.id&&id!==BLOCKS.GLASS.id;
+}
+
+function updatePlayer() {
+  // Movement
+  if(keys['ArrowLeft']||keys['a']||keys['A']) player.vx=-MOVE_SPEED;
+  else if(keys['ArrowRight']||keys['d']||keys['D']) player.vx=MOVE_SPEED;
+  else player.vx*=0.8;
+
+  if((keys['ArrowUp']||keys['w']||keys['W']||keys[' '])&&player.onGround) {
+    player.vy=JUMP_FORCE;
+    player.onGround=false;
+  }
+
+  player.vy+=GRAVITY;
+  player.vy=Math.min(player.vy,12);
+
+  // X collision
+  player.x+=player.vx;
+  const lx=Math.floor(player.x/TILE), rx=Math.floor((player.x+player.w-1)/TILE);
+  const ty1=Math.floor(player.y/TILE), ty2=Math.floor((player.y+player.h-1)/TILE);
+  for(let ty=ty1;ty<=ty2;ty++) {
+    if(isSolid(getBlock(lx,ty))) { player.x=lx*TILE+TILE; player.vx=0; break; }
+    if(isSolid(getBlock(rx,ty))) { player.x=rx*TILE-player.w; player.vx=0; break; }
+  }
+
+  // Y collision
+  player.onGround=false;
+  player.y+=player.vy;
+  const lx2=Math.floor(player.x/TILE), rx2=Math.floor((player.x+player.w-1)/TILE);
+  const topY=Math.floor(player.y/TILE), botY=Math.floor((player.y+player.h-1)/TILE);
+  if(player.vy>0) {
+    for(let tx=lx2;tx<=rx2;tx++) {
+      if(isSolid(getBlock(tx,botY))) {
+        player.y=botY*TILE-player.h; player.vy=0; player.onGround=true; break;
+      }
+    }
+  } else if(player.vy<0) {
+    for(let tx=lx2;tx<=rx2;tx++) {
+      if(isSolid(getBlock(tx,topY))) {
+        player.y=topY*TILE+TILE; player.vy=0; break;
+      }
+    }
+  }
+
+  // Bounds
+  player.x=Math.max(0,Math.min(COLS*TILE-player.w,player.x));
+  player.y=Math.max(0,Math.min(ROWS*TILE-player.h,player.y));
+
+  // Scroll hotbar
+  if(keys['1']) player.selectedSlot=0;
+  if(keys['2']) player.selectedSlot=1;
+  if(keys['3']) player.selectedSlot=2;
+  if(keys['4']) player.selectedSlot=3;
+  if(keys['5']) player.selectedSlot=4;
+  if(keys['6']) player.selectedSlot=5;
+  if(keys['7']) player.selectedSlot=6;
+}
+
+// ===== RENDER =====
+function getBlockColor(id) {
+  return Object.values(BLOCKS).find(b=>b.id===id)||BLOCKS.AIR;
+}
+
+function drawWorld() {
+  const startX=Math.max(0,Math.floor(camX/TILE));
+  const endX=Math.min(COLS,Math.ceil((camX+canvas.width)/TILE)+1);
+  const startY=Math.max(0,Math.floor(camY/TILE));
+  const endY=Math.min(ROWS,Math.ceil((camY+canvas.height)/TILE)+1);
+
+  for(let y=startY;y<endY;y++) {
+    for(let x=startX;x<endX;x++) {
+      const id=world[y][x];
+      if(id===BLOCKS.AIR.id) continue;
+      const block=getBlockColor(id);
+      const px=x*TILE-camX, py=y*TILE-camY;
+
+      ctx.globalAlpha=block.alpha||1;
+      ctx.fillStyle=block.color;
+      ctx.fillRect(px,py,TILE,TILE);
+
+      // Grass top highlight
+      if(id===BLOCKS.GRASS.id&&block.top) {
+        ctx.fillStyle=block.top;
+        ctx.fillRect(px,py,TILE,4);
+      }
+
+      // Ore sparkle
+      if(block.ore) {
+        ctx.fillStyle='rgba(255,255,255,0.3)';
+        ctx.fillRect(px+4,py+4,4,4);
+        ctx.fillRect(px+12,py+14,3,3);
+      }
+
+      // Grid lines
+      ctx.globalAlpha=0.15;
+      ctx.strokeStyle='#000';
+      ctx.lineWidth=0.5;
+      ctx.strokeRect(px,py,TILE,TILE);
+      ctx.globalAlpha=1;
+    }
+  }
+}
+
+function drawSky() {
+  const skyGrad=ctx.createLinearGradient(0,0,0,canvas.height);
+  skyGrad.addColorStop(0,'#5ba3d9');
+  skyGrad.addColorStop(1,'#87CEEB');
+  ctx.fillStyle=skyGrad;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // Clouds
+  ctx.fillStyle='rgba(255,255,255,0.8)';
+  [[100,40,60,20],[300,30,80,18],[550,50,50,16]].forEach(([cx,cy,cw,ch])=>{
+    const rx=(cx-camX*0.3)%canvas.width;
+    ctx.beginPath();
+    ctx.ellipse(rx,cy,cw,ch,0,0,Math.PI*2);
+    ctx.fill();
+  });
+}
+
+function drawPlayer() {
+  const px=player.x-camX, py=player.y-camY;
+
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,0.2)';
+  ctx.ellipse(px+player.w/2,py+player.h,player.w/2,4,0,0,Math.PI*2);
+  ctx.fill();
+
+  // Body
+  ctx.fillStyle='#4a7abf';
+  ctx.fillRect(px+2,py+player.h*0.45,player.w-4,player.h*0.5);
+
+  // Head
+  ctx.fillStyle='#f5c89a';
+  ctx.fillRect(px+player.w*0.15,py,player.w*0.7,player.h*0.4);
+
+  // Hair
+  ctx.fillStyle='#5c3a1e';
+  ctx.fillRect(px+player.w*0.15,py,player.w*0.7,6);
+
+  // Eyes
+  ctx.fillStyle='#333';
+  ctx.fillRect(px+player.w*0.25,py+10,4,4);
+  ctx.fillRect(px+player.w*0.6,py+10,4,4);
+
+  // Legs
+  ctx.fillStyle='#2d4a7a';
+  ctx.fillRect(px+2,py+player.h*0.85,player.w/2-3,player.h*0.15);
+  ctx.fillRect(px+player.w/2+1,py+player.h*0.85,player.w/2-3,player.h*0.15);
+
+  // Tool in hand
+  const slot=player.inventory[player.selectedSlot];
+  if(slot.block!==null) {
+    const block=getBlockColor(slot.block);
+    ctx.fillStyle=block.color||'#888';
+    ctx.fillRect(px+player.w,py+player.h*0.4,8,8);
+  } else {
+    // Pickaxe
+    ctx.fillStyle='#888';
+    ctx.fillRect(px+player.w,py+player.h*0.35,3,14);
+    ctx.fillStyle='#c0c0c0';
+    ctx.fillRect(px+player.w-2,py+player.h*0.35,8,4);
+  }
+}
+
+function drawParticles() {
+  particles.forEach(p=>{
+    ctx.globalAlpha=p.life;
+    ctx.fillStyle=p.color;
+    ctx.fillRect(p.x-camX-p.size/2,p.y-camY-p.size/2,p.size,p.size);
+  });
+  ctx.globalAlpha=1;
+}
+
+function drawCursor() {
+  const tx=Math.floor(mouseWorld.x/TILE), ty=Math.floor(mouseWorld.y/TILE);
+  if(tx>=0&&tx<COLS&&ty>=0&&ty<ROWS) {
+    const dist=Math.sqrt(Math.pow(mouseWorld.x-(player.x+player.w/2),2)+Math.pow(mouseWorld.y-(player.y+player.h/2),2));
+    ctx.strokeStyle=dist<TILE*5?'rgba(255,255,255,0.7)':'rgba(255,0,0,0.4)';
+    ctx.lineWidth=1.5;
+    ctx.strokeRect(tx*TILE-camX,ty*TILE-camY,TILE,TILE);
+  }
+}
+
+// ===== HUD =====
+function renderHearts() {
+  const el=document.getElementById('hearts');
+  el.innerHTML='';
+  for(let i=0;i<player.maxHp;i++) {
+    const h=document.createElement('span');
+    h.className='heart';
+    h.textContent=i<player.hp?'❤️':'🖤';
+    el.appendChild(h);
+  }
+}
+
+function renderHotbar() {
+  const el=document.getElementById('hotbar');
+  el.innerHTML='';
+  player.inventory.forEach((slot,i)=>{
+    const div=document.createElement('div');
+    div.className='slot'+(i===player.selectedSlot?' active':'');
+    div.onclick=()=>{ player.selectedSlot=i; renderHotbar(); };
+    if(slot.block===null) {
+      div.innerHTML='⛏️<span class="slot-label">Đào</span>';
+    } else {
+      const block=getBlockColor(slot.block);
+      div.innerHTML=`${block.emoji||'⬜'}<span class="slot-label">${block.name}</span>${slot.count>0?'<span class="slot-count">'+slot.count+'</span>':''}`;
+    }
+    el.appendChild(div);
+  });
+}
+
+// ===== TOOLTIP =====
+let tooltipTimer=null;
+function showTooltip(msg) {
+  const el=document.getElementById('tooltip');
+  el.textContent=msg; el.classList.add('show');
+  clearTimeout(tooltipTimer);
+  tooltipTimer=setTimeout(()=>el.classList.remove('show'),1500);
+}
+
+// ===== MOBILE CONTROLS =====
+function setupMobileControls() {
+  const btnLeft=document.getElementById('btn-left');
+  const btnRight=document.getElementById('btn-right');
+  const btnJump=document.getElementById('btn-jump');
+  const btnDig=document.getElementById('btn-dig');
+  const btnPlace=document.getElementById('btn-place');
+
+  function hold(key, el) {
+    el.addEventListener('touchstart',e=>{e.preventDefault();keys[key]=true;},{passive:false});
+    el.addEventListener('touchend',e=>{e.preventDefault();keys[key]=false;},{passive:false});
+    el.addEventListener('mousedown',()=>keys[key]=true);
+    el.addEventListener('mouseup',()=>keys[key]=false);
+  }
+  hold('ArrowLeft',btnLeft);
+  hold('ArrowRight',btnRight);
+  hold(' ',btnJump);
+
+  // Nút đào
+  btnDig.addEventListener('touchstart',e=>{
+    e.preventDefault();
+    placeOrBreak(mouseWorld.x, mouseWorld.y, 'break');
+  },{passive:false});
+  btnDig.addEventListener('click',()=>placeOrBreak(mouseWorld.x, mouseWorld.y, 'break'));
+
+  // Nút đặt
+  btnPlace.addEventListener('touchstart',e=>{
+    e.preventDefault();
+    placeOrBreak(mouseWorld.x, mouseWorld.y, 'place');
+  },{passive:false});
+  btnPlace.addEventListener('click',()=>placeOrBreak(mouseWorld.x, mouseWorld.y, 'place'));
+}
+
+// ===== GAME LOOP =====
+let running=false;
+function gameLoop() {
+  if(!running) return;
+  requestAnimationFrame(gameLoop);
+
+  updatePlayer();
+  updateCamera();
+  updateParticles();
+
+  // Draw
+  drawSky();
+  drawWorld();
+  drawPlayer();
+  drawParticles();
+  drawCursor();
+
+  // Update UI
+  document.getElementById('pos').textContent=`x:${Math.floor(player.x/TILE)} y:${Math.floor(player.y/TILE)}`;
+}
+
+function resizeCanvas() {
+  canvas.width=window.innerWidth;
+  canvas.height=window.innerHeight-0;
+}
+
+function startGame() {
+  document.getElementById('overlay').style.display='none';
+  resizeCanvas();
+  initWorld();
+  // Spawn player above ground
+  for(let y=0;y<ROWS;y++) {
+    if(world[y][5]!==BLOCKS.AIR.id) {
+      player.x=5*TILE; player.y=(y-3)*TILE; break;
+    }
+  }
+  renderHearts();
+  renderHotbar();
+  setupMobileControls();
+  running=true;
+  gameLoop();
+}
+
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// Keyboard slot select
+document.addEventListener('keydown', e=>{
+  const n=parseInt(e.key);
+  if(n>=1&&n<=8) { player.selectedSlot=n-1; renderHotbar(); }
+});
+</script>
+</body>
+</html>
